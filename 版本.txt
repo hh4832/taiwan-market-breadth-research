@@ -77,7 +77,7 @@ v6：Breadth Dynamics & Extreme Breadth Study
 - 分開計算 group vs non-group、group vs 同 regime unconditional mean、group mean vs zero。
 - 四類假說分別執行 global 與 research-family BH-FDR/Bonferroni。
 - 新增尾端風險、predictor correlation、PR quintile monotonicity、年度穩健性及 concentration warning。
-- limit price 無法取得時才以 ±9.5% 近似，metadata 必須標記 limitation。
+- 漲跌停價不再使用 ±9.5% 報酬近似，改由參考價、歷史漲跌幅制度與 tick size 計算。
 - 新增 Colab runner、Google Drive timestamped archive、合成資料 unit/smoke tests。
 - 漲跌停判斷改採前一個有效收盤價＋臺股 tick-size rounding；2015-06-01 前使用 7%，之後使用 10%，並支援公司行動參考價覆蓋。
 - README 新增可直接開啟 main branch v6 notebook 的 Open in Colab badge。
