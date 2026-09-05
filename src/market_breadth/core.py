@@ -238,4 +238,12 @@ def add_forward_returns(dataset: pd.DataFrame, open_0050: pd.Series, close_0050:
     out["ret_o1_o2"] = o.shift(-2).div(o.shift(-1)).sub(1)
     out["ret_o1_c2"] = c.shift(-2).div(o.shift(-1)).sub(1)
     out["ret_o1_c3"] = c.shift(-3).div(o.shift(-1)).sub(1)
+    # v7 validation-only horizons. They are not added to the v6 discovery grid.
+    out["ret_o1_c5"] = c.shift(-5).div(o.shift(-1)).sub(1)
+    out["ret_o2_c2"] = c.shift(-2).div(o.shift(-2)).sub(1)
+    out["ret_o2_c3"] = c.shift(-3).div(o.shift(-2)).sub(1)
+    out["ret_o2_c5"] = c.shift(-5).div(o.shift(-2)).sub(1)
+    out["ret_c1_c2"] = c.shift(-2).div(c.shift(-1)).sub(1)
+    out["ret_c1_c3"] = c.shift(-3).div(c.shift(-1)).sub(1)
+    out["ret_c1_c5"] = c.shift(-5).div(c.shift(-1)).sub(1)
     return out.replace([np.inf, -np.inf], np.nan)

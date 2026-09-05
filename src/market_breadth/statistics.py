@@ -138,7 +138,7 @@ def _bh_bonferroni(p_values: pd.Series) -> tuple[pd.Series, pd.Series]:
     return fdr, bonf
 
 
-def add_multiple_testing_corrections(results: pd.DataFrame) -> pd.DataFrame:
+def add_multiple_testing_corrections(results: pd.DataFrame, suffix: str = "") -> pd.DataFrame:
     out = results.copy()
     families = {
         "group_vs_non_group": "HAC_p_value",
@@ -148,8 +148,8 @@ def add_multiple_testing_corrections(results: pd.DataFrame) -> pd.DataFrame:
     }
     for family, p_col in families.items():
         global_fdr, global_bonf = _bh_bonferroni(out[p_col])
-        out[f"{family}_FDR_global"] = global_fdr
-        out[f"{family}_Bonferroni_global"] = global_bonf
+        out[f"{family}_FDR_global{suffix}"] = global_fdr
+        out[f"{family}_Bonferroni_global{suffix}"] = global_bonf
         family_fdr = pd.Series(np.nan, index=out.index, dtype=float)
         family_bonf = pd.Series(np.nan, index=out.index, dtype=float)
         # A research family holds predictor family, target, regime, and signal method fixed.
@@ -157,8 +157,8 @@ def add_multiple_testing_corrections(results: pd.DataFrame) -> pd.DataFrame:
         for _, idx in out.groupby(keys, dropna=False).groups.items():
             fdr, bonf = _bh_bonferroni(out.loc[idx, p_col])
             family_fdr.loc[idx], family_bonf.loc[idx] = fdr, bonf
-        out[f"{family}_FDR_family"] = family_fdr
-        out[f"{family}_Bonferroni_family"] = family_bonf
+        out[f"{family}_FDR_family{suffix}"] = family_fdr
+        out[f"{family}_Bonferroni_family{suffix}"] = family_bonf
     return out
 
 

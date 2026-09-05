@@ -81,3 +81,12 @@ v6：Breadth Dynamics & Extreme Breadth Study
 - 新增 Colab runner、Google Drive timestamped archive、合成資料 unit/smoke tests。
 - 漲跌停判斷改採前一個有效收盤價＋臺股 tick-size rounding；2015-06-01 前使用 7%，之後使用 10%，並支援公司行動參考價覆蓋。
 - README 新增可直接開啟 main branch v6 notebook 的 Open in Colab badge。
+
+=======================================================
+
+v7：Robustness Validation
+
+- 以實際訊號日期遮罩 hash 去除 PR 別名與完全相同鏡像假設後，重新計算 FDR/Bonferroni。
+- 新增預先指定候選的年度穩定性、leave-one-year-out 與五分位 HAC 趨勢檢定。
+- 新增 limit-up breadth PR>=80 的直接追價、日線回檔後 O2 可交易進場與非重疊事件比較。
+- v6 discovery grid 保持不變；v7 新報酬期間只用於 robustness validation。

@@ -24,6 +24,14 @@ class V6Config:
     current_limit_rate: float = 0.10
 
 
+@dataclass(frozen=True)
+class V7Config(V6Config):
+    """v7 keeps the v6 discovery grid and adds prespecified robustness tests."""
+
+    output_dir: Path = Path("output/market_breadth_0050_study_v7")
+    pullback_thresholds: tuple[float, ...] = (0.0, -0.005, -0.01)
+
+
 PREDICTOR_SPECS = {
     "up_ratio": ("LEVEL", "up"),
     "down_ratio": ("LEVEL", "down"),
@@ -46,6 +54,26 @@ TARGET_METADATA = {
     "ret_o1_o2": {"formula": "Open[t+2] / Open[t+1] - 1", "hac_lag": 0},
     "ret_o1_c2": {"formula": "Close[t+2] / Open[t+1] - 1", "hac_lag": 1},
     "ret_o1_c3": {"formula": "Close[t+3] / Open[t+1] - 1", "hac_lag": 2},
+}
+
+
+V7_CANDIDATES = (
+    ("limit_down_ratio", "PR", "PR_GE_80", "ALL", "ret_o1_c2"),
+    ("delta_down_ratio_1d", "PR", "PR_GE_80", "BULL", "ret_o1_c3"),
+    ("up_ratio", "PR", "PR_GE_95", "ALL", "ret_o1_c1"),
+    ("limit_up_ratio", "PR", "PR_GE_80", "ALL", "ret_o1_c3"),
+    ("limit_up_ratio", "PR", "PR_GE_80", "BULL", "ret_o1_c3"),
+    ("accel_up_ratio_1d", "PR", "PR_GE_80", "BEAR", "ret_c0_o1"),
+)
+
+V7_VALIDATION_TARGET_METADATA = {
+    "ret_o1_c5": {"formula": "Close[t+5] / Open[t+1] - 1", "hac_lag": 4},
+    "ret_o2_c2": {"formula": "Close[t+2] / Open[t+2] - 1", "hac_lag": 0},
+    "ret_o2_c3": {"formula": "Close[t+3] / Open[t+2] - 1", "hac_lag": 1},
+    "ret_o2_c5": {"formula": "Close[t+5] / Open[t+2] - 1", "hac_lag": 3},
+    "ret_c1_c2": {"formula": "Close[t+2] / Close[t+1] - 1", "hac_lag": 0},
+    "ret_c1_c3": {"formula": "Close[t+3] / Close[t+1] - 1", "hac_lag": 1},
+    "ret_c1_c5": {"formula": "Close[t+5] / Close[t+1] - 1", "hac_lag": 3},
 }
 
 PR_GROUPS = {

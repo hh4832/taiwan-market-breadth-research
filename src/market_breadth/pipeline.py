@@ -4,7 +4,7 @@ import warnings
 
 import pandas as pd
 
-from .config import V6Config
+from .config import V6Config, V7Config
 from .core import add_forward_returns, add_market_regime, add_rolling_normalization, build_market_breadth
 from .data import (
     FINLAB_KEYS,
@@ -21,6 +21,14 @@ from .plots import make_core_plots
 from .statistics import run_signal_study
 from .summaries import build_monotonicity_results, build_yearly_results
 from .validation import validate_v6
+from .robustness import (
+    add_deduplicated_corrections,
+    attach_hypothesis_identity,
+    build_fdr_comparison,
+    build_limit_up_pullback_validation,
+    build_quintile_trend_results,
+    build_yearly_stability,
+)
 
 
 def _symbol(frame: pd.DataFrame, symbol: str, label: str) -> pd.Series:
@@ -82,13 +90,67 @@ def run(config: V6Config | None = None) -> dict[str, object]:
     results = run_signal_study(dataset, config=cfg)
     monotonicity = build_monotonicity_results(dataset, cfg)
     yearly = build_yearly_results(dataset, results, cfg)
+    v7_outputs: dict[str, pd.DataFrame] = {}
+    if isinstance(cfg, V7Config):
+        results = attach_hypothesis_identity(dataset, results, cfg)
+        results = add_deduplicated_corrections(results)
+        fdr_comparison = build_fdr_comparison(results)
+        trend = build_quintile_trend_results(dataset, cfg)
+        yearly_stability, leave_one_year_out, yearly_stability_detail = build_yearly_stability(dataset, results, cfg)
+        pullback, pullback_yearly = build_limit_up_pullback_validation(dataset, cfg)
+        duplicate_map = results.loc[results["duplicate_group_size"].gt(1), [
+            "canonical_hypothesis_id", "signal_mask_hash", "predictor", "canonical_predictor",
+            "signal_method", "group", "group_type", "market_regime", "target",
+            "is_duplicate_hypothesis", "duplicate_group_size", "duplicate_reason",
+        ]]
+        profile_focus = trend.loc[
+            trend["predictor"].isin(["limit_up_ratio", "down_ratio", "delta_down_ratio_1d", "limit_down_ratio", "big_down_ratio"])
+        ]
+        validation_summary = _build_validation_summary(results, trend, yearly_stability, pullback)
+        v7_outputs = {
+            "deduplicated_hypotheses": results.loc[~results["is_duplicate_hypothesis"]],
+            "fdr_comparison_v6_v7": fdr_comparison,
+            "duplicate_hypothesis_map": duplicate_map,
+            "yearly_stability_summary": yearly_stability,
+            "yearly_stability_detail": yearly_stability_detail,
+            "leave_one_year_out": leave_one_year_out,
+            "quintile_trend_results": trend,
+            "candidate_quintile_profiles": profile_focus,
+            "limit_up_pullback_validation": pullback,
+            "limit_up_pullback_yearly": pullback_yearly,
+            "validation_summary": validation_summary,
+        }
     validations = validate_v6(common_close, breadth, dataset, results, config=cfg)
     metadata = build_metadata(cfg, dataset, breadth_meta, selected_keys)
-    paths = export_results(dataset, results, monotonicity, yearly, metadata, validations, cfg)
+    paths = export_results(dataset, results, monotonicity, yearly, metadata, validations, cfg, v7_outputs=v7_outputs)
     figure_manifest = make_core_plots(dataset, results, paths["plots"], cfg)
     return {
         "dataset": dataset, "results": results, "monotonicity": monotonicity,
         "yearly": yearly, "validations": validations, "metadata": metadata,
         "selected_metadata": selected_metadata, "metadata_audit": metadata_audit,
-        "figure_manifest": figure_manifest, "output_paths": paths,
+        "figure_manifest": figure_manifest, "output_paths": paths, "v7_outputs": v7_outputs,
     }
+
+
+def _build_validation_summary(
+    results: pd.DataFrame, trend: pd.DataFrame, yearly: pd.DataFrame, pullback: pd.DataFrame,
+) -> pd.DataFrame:
+    global_cols = [c for c in results if c.endswith("FDR_global_v7")]
+    family_cols = [c for c in results if c.endswith("FDR_family_v7")]
+    canonical = ~results["is_duplicate_hypothesis"]
+    global_count = int(results.loc[canonical, global_cols].lt(.05).any(axis=1).sum())
+    family_count = int(results.loc[canonical, family_cols].lt(.05).any(axis=1).sum())
+    stable = int((yearly["is_prespecified_candidate"] & yearly["direction_consistency_rate"].ge(.6)).sum()) if not yearly.empty else 0
+    trend_count = int((~trend["is_duplicate_hypothesis"] & trend["trend_FDR_global"].lt(.05)).sum())
+    tradable = pullback.loc[(pullback["execution_status"] == "tradable_open_entry") & (pullback["overlap_policy"] == "non_overlapping")]
+    improved = int((tradable["mean_minus_direct_same_events"].gt(0) & tradable["wait_vs_direct_HAC_p"].lt(.05)).sum()) if not tradable.empty else 0
+    rows = [
+        ("去重後是否有任何 global FDR < 0.05？", f"共有 {global_count} 個 canonical signal 通過任一 v7 global FDR。"),
+        ("哪些訊號通過 family FDR？", f"共有 {family_count} 個 canonical signal 通過任一 v7 family FDR；詳見 deduplicated_hypotheses。"),
+        ("哪些訊號跨年度方向穩定？", f"預先指定候選中有 {stable} 個方向一致率至少 60%；詳見 yearly_stability_summary。"),
+        ("哪些五分位呈現顯著單調趨勢？", f"共有 {trend_count} 個去重後趨勢通過 global FDR 5%。"),
+        ("漲停後等待回檔是否優於直接 O1 追價？", f"可交易、非重疊回檔組合中有 {improved} 個同事件比較呈正差且 HAC p<0.05；仍需對照完整表格判讀。"),
+        ("扣除重複與重疊事件後，候選是否仍存在？", "以 non_overlapping 列及 v7 校正欄位為準，不以 raw event 顯著性代替。"),
+        ("最終保留、降級與淘汰哪些訊號？", "此檔只提供可重現統計證據，不自動宣稱訊號可交易；由研究者依機制、穩定性與成本決策。"),
+    ]
+    return pd.DataFrame(rows, columns=["question", "answer"])
