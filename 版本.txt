@@ -1,0 +1,83 @@
+修改路徑
+PROJECT_DIR = Path.cwd()
+
+CACHE_DIR = PROJECT_DIR / "cache"
+OUTPUT_DIR = PROJECT_DIR / "output" / "market_breadth_0050_study"
+
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+需要修正總家數
+=======================================================
+
+v2 更新內容
+修正市場篩選邏輯，正確納入 上市（sii） 與 上櫃（otc） 普通股，排除興櫃（rotc）。
+修正市場廣度快取（cache）機制，避免修改股票母體後仍誤讀舊版市場廣度資料。
+新增市場篩選檢查（Market Filter Audit），輸出各市場股票數與實際納入數量，方便驗證研究母體是否正確。
+強化資料驗證流程，修正市場廣度家數（up/down/flat/valid count）與人工驗證的一致性檢查。
+
+=======================================================
+
+v3：新增 Excess Return vs. Unconditional Figure，顯示各市場廣度分組相對於全樣本平均報酬的超額報酬。
+
+=======================================================
+
+v4 主要更新：
+新增 up_ratio = up_count / (up_count + down_count)
+新增 down_ratio = down_count / (up_count + down_count)
+兩者沿用原本完整流程：
+Q1–Q5
+LOW_5／HIGH_5
+HAC 檢定
+Sharpe、Cohen’s d
+圖形
+Excel／CSV／Parquet 輸出
+新增比例代數驗證：
+up_ratio + down_ratio = 1
+breadth_net_ratio = 2 × up_ratio − 1
+breadth_net_ratio = 1 − 2 × down_ratio
+Excel 新增：
+predictor_pearson
+predictor_spearman
+市場廣度快取改為 v4 專用檔名，若舊快取缺少新 predictor，程式也會自動重建，不會誤讀 v3 結果。
+已清除 notebook 舊執行輸出，並通過全部 code cells 的靜態語法檢查。
+
+=======================================================
+
+v5 新增內容：
+
+calc_hac_mean_vs_zero()：以只有截距的 OLS＋HAC 檢驗 E(return | group) = 0。
+calc_binomial_test()：雙尾檢驗訊號組勝率是否不同於 50%。
+apply_multiple_testing_correction()：分別對 HAC mean-vs-zero 與 binomial p-value 執行 BH-FDR、Bonferroni。
+run_mean_vs_zero_analysis()：沿用原本 predictor × target × group 流程執行新分析。
+merge_all_results_v5()：將新統計欄位合併到原 all_results，產生 all_results_v5。
+新增 HAC mean、HAC standard error、t-value、p-value、95% CI、勝率相對 50%、binomial p-value 與兩套多重比較欄位。
+新增 Mean Return vs Zero 圖，使用原始 group mean、HAC 95% CI、零報酬線與樣本數。
+Excel 新增：
+mean_vs_zero_results
+all_results_v5
+保留原本 all_results 的欄位與用途，不以新檢定覆蓋 Group vs Non-group 結果。
+新增相關 validation，檢查 HAC intercept、CI、勝率公式、成功／失敗筆數、修正後 p-value、merge 完整性與無限值。
+
+多重比較的檢定家族分別定義為全部有效的：
+
+predictor × target × group_type × group
+
+HAC mean-vs-zero 與 binomial test 各自獨立修正，不混成同一組 p-value。
+
+=======================================================
+
+v6：Breadth Dynamics & Extreme Breadth Study
+
+- 保留 v5 notebook 作為不可覆寫的 baseline，核心 v6 邏輯移至 src/market_breadth/。
+- 正式 predictor：up/down level、3 日 persistence、1 日 delta、1 日 acceleration、±5% extreme、limit-up/down ratio。
+- 新增 trailing 252 日 PR 與 Z；正式訊號只使用 t 與過去資料，不使用 full-sample rank。
+- 新增 0050 Close[t] vs MA60[t] 的 ALL/BULL/BEAR 分層。
+- 主要 targets 限定 ret_c0_o1、ret_c0_c1、ret_o1_c1、ret_o1_o2、ret_o1_c2、ret_o1_c3。
+- 分開計算 group vs non-group、group vs 同 regime unconditional mean、group mean vs zero。
+- 四類假說分別執行 global 與 research-family BH-FDR/Bonferroni。
+- 新增尾端風險、predictor correlation、PR quintile monotonicity、年度穩健性及 concentration warning。
+- limit price 無法取得時才以 ±9.5% 近似，metadata 必須標記 limitation。
+- 新增 Colab runner、Google Drive timestamped archive、合成資料 unit/smoke tests。
+- 漲跌停判斷改採前一個有效收盤價＋臺股 tick-size rounding；2015-06-01 前使用 7%，之後使用 10%，並支援公司行動參考價覆蓋。
+- README 新增可直接開啟 main branch v6 notebook 的 Open in Colab badge。
