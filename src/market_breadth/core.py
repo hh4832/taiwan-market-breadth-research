@@ -11,10 +11,42 @@ from .config import PREDICTOR_SPECS, V6Config
 
 def normalize_datetime_index(obj: pd.DataFrame | pd.Series, name: str):
     out = obj.copy()
-    try:
-        out.index = pd.to_datetime(out.index)
-    except Exception as exc:
-        raise ValueError(f"{name} index 無法轉為 DatetimeIndex") from exc
+    if not isinstance(out.index, pd.DatetimeIndex):
+        parsed_index = pd.to_datetime(out.index, format="mixed", errors="coerce")
+        index_ratio = float(parsed_index.notna().mean()) if len(parsed_index) else 0.0
+
+        # Some FinLab/runtime combinations can expose date × symbol data with
+        # the two axes reversed. Only transpose on strong, inspectable evidence.
+        if isinstance(out, pd.DataFrame) and index_ratio < 0.8:
+            parsed_columns = pd.to_datetime(out.columns, format="mixed", errors="coerce")
+            column_ratio = float(parsed_columns.notna().mean()) if len(parsed_columns) else 0.0
+            if column_ratio >= 0.8:
+                out = out.T
+                out.index = parsed_columns
+            else:
+                raise ValueError(
+                    f"{name} index 無法轉為 DatetimeIndex；"
+                    f"index_type={type(obj.index).__name__}, "
+                    f"index_sample={list(obj.index[:5])}, "
+                    f"index_date_ratio={index_ratio:.3f}, "
+                    f"column_sample={list(obj.columns[:5])}, "
+                    f"column_date_ratio={column_ratio:.3f}"
+                )
+        elif index_ratio >= 0.8:
+            if index_ratio < 1.0:
+                invalid = list(out.index[pd.isna(parsed_index)][:5])
+                raise ValueError(
+                    f"{name} index 含無法解析的日期；invalid_sample={invalid}, "
+                    f"valid_ratio={index_ratio:.3f}"
+                )
+            out.index = parsed_index
+        else:
+            raise ValueError(
+                f"{name} index 無法轉為 DatetimeIndex；"
+                f"index_type={type(obj.index).__name__}, "
+                f"index_sample={list(obj.index[:5])}, "
+                f"index_date_ratio={index_ratio:.3f}"
+            )
     if out.index.has_duplicates:
         raise ValueError(f"{name} index 有重複日期")
     return out.sort_index()

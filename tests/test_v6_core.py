@@ -12,6 +12,7 @@ from market_breadth.core import (
     build_market_breadth,
     calculate_limit_prices,
     rolling_percentile_rank,
+    normalize_datetime_index,
 )
 from market_breadth.statistics import run_signal_study
 from market_breadth.validation import validate_v6
@@ -63,6 +64,17 @@ class V6CoreTest(unittest.TestCase):
         after = rolling_percentile_rank(changed, 20, 5)
         pd.testing.assert_series_equal(before.iloc[:-1], after.iloc[:-1])
         self.assertNotEqual(before.iloc[-1], after.iloc[-1])
+
+    def test_reversed_finlab_axes_are_detected_and_transposed(self):
+        frame = pd.DataFrame(
+            [[10.0, 10.5], [20.0, 19.5]],
+            index=["0050", "2330"],
+            columns=["2026-09-03", "2026-09-04"],
+        )
+        normalized = normalize_datetime_index(frame, "stock_close")
+        self.assertIsInstance(normalized.index, pd.DatetimeIndex)
+        self.assertEqual(list(normalized.columns), ["0050", "2330"])
+        self.assertEqual(normalized.loc[pd.Timestamp("2026-09-04"), "2330"], 19.5)
 
     def test_targets_regime_statistics_and_validation(self):
         with warnings.catch_warnings():

@@ -47,6 +47,8 @@ def load_or_download(label: str, key: str, cache_dir: Path, refresh: bool = Fals
         frame = data.get(key)
         if frame is None or len(frame) == 0:
             raise ValueError(f"FinLab key {key!r} 回傳空資料")
+        if normalize_index:
+            frame = normalize_datetime_index(frame, label)
         cache_dir.mkdir(parents=True, exist_ok=True)
         frame.to_parquet(path)
     return normalize_datetime_index(frame, label) if normalize_index else frame
