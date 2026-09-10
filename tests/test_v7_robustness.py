@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from market_breadth.config import V7Config
+from market_breadth.config import V7Config, V8Config
 from market_breadth.core import add_forward_returns, add_market_regime, add_rolling_normalization, build_market_breadth
 from market_breadth.robustness import (
     _non_overlapping_mask,
@@ -11,6 +11,7 @@ from market_breadth.robustness import (
     add_deduplicated_corrections,
     attach_hypothesis_identity,
     build_limit_up_pullback_validation,
+    build_limit_up_cooldown_validation,
     build_quintile_trend_results,
     build_yearly_stability,
 )
@@ -107,6 +108,46 @@ class V7RobustnessTest(unittest.TestCase):
         mask = pd.Series([True, True, True, False, True, True], index=pd.RangeIndex(6))
         selected = _non_overlapping_mask(mask, 2)
         self.assertEqual(selected[selected].index.tolist(), [0, 4])
+
+    def test_v8_cooldown_definitions_and_o2_horizons(self):
+        cfg = V8Config(pr_window=60, z_window=60, min_history=20, ma_window=20)
+        stage, validation, yearly = build_limit_up_cooldown_validation(self.dataset, cfg)
+        self.assertFalse(stage.empty)
+        self.assertFalse(validation.empty)
+        self.assertEqual(set(validation.target), {
+            "ret_o2_c2", "ret_o2_c3", "ret_o2_c5", "ret_o2_c10",
+            "ret_c1_c2", "ret_c1_c3", "ret_c1_c5", "ret_c1_c10",
+        })
+        tradable = validation[validation.execution_status == "tradable_open_entry"]
+        diagnostic = validation[validation.execution_status == "diagnostic_close_entry"]
+        self.assertTrue((tradable.entry_time == "Open[t+2]").all())
+        self.assertTrue((diagnostic.entry_time == "Close[t+1]").all())
+        self.assertTrue((validation.condition_known_time == "Close[t+1]").all())
+        self.assertIn("intraday_o1_c1_le_0", set(validation.group))
+        self.assertIn("close_c0_c1_le_0", set(validation.group))
+        self.assertIn("limit_up_breadth_declines", set(validation.group))
+        correction_cols = [c for c in validation if "FDR_" in c or "Bonferroni_" in c]
+        self.assertTrue(validation.loc[validation.overlap_policy == "raw", correction_cols].isna().all().all())
+        self.assertTrue(validation.loc[validation.overlap_policy == "non_overlapping", "mean_vs_zero_FDR_global"].notna().any())
+        self.assertTrue(validation["alternate_entry_same_events_mean"].notna().any())
+        self.assertTrue(validation["mean_minus_alternate_entry"].notna().any())
+
+    def test_v8_cooldown_uses_distinct_intraday_and_close_to_close_rules(self):
+        cfg = V8Config(pr_window=60, z_window=60, min_history=20, ma_window=20)
+        changed = self.dataset.copy()
+        # Construct a date with positive gap but negative intraday return: C1 is
+        # below O1 yet still above C0.  The two cooldown definitions must differ.
+        pos = 200
+        changed.iloc[pos + 1, changed.columns.get_loc("open_0050")] = changed.iloc[pos, changed.columns.get_loc("close_0050")] * 1.02
+        changed.iloc[pos + 1, changed.columns.get_loc("close_0050")] = changed.iloc[pos, changed.columns.get_loc("close_0050")] * 1.01
+        changed.iloc[pos, changed.columns.get_loc("ret_o1_c1")] = 1.01 / 1.02 - 1
+        changed.iloc[pos, changed.columns.get_loc("ret_c0_c1")] = .01
+        from market_breadth.robustness import _cooldown_conditions
+        base = pd.Series(False, index=changed.index)
+        base.iloc[pos] = True
+        conditions = _cooldown_conditions(changed, base, cfg)
+        self.assertTrue(conditions["intraday_o1_c1_le_0"].iloc[pos])
+        self.assertFalse(conditions["close_c0_c1_le_0"].iloc[pos])
 
 
 if __name__ == "__main__":

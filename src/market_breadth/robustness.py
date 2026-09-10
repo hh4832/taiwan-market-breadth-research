@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from .config import PREDICTOR_SPECS, PR_GROUPS, TARGET_METADATA, V7_CANDIDATES, V7Config, Z_GROUPS
+from .config import PREDICTOR_SPECS, PR_GROUPS, TARGET_METADATA, V7_CANDIDATES, V7Config, V8Config, Z_GROUPS
 from .statistics import _bh_bonferroni, _cohen_d, _describe, _hac_mean_test, _mask_for_group, _weighted_difference_test
 
 
@@ -418,3 +418,158 @@ def build_limit_up_pullback_validation(
         ).reset_index()
         yearly = yearly.merge(summary, on=keys, how="left")
     return out, yearly
+
+
+COOLDOWN_TARGETS = {
+    "ret_o2_c2": (0, "Open[t+2]", "tradable_open_entry", "ret_c1_c2"),
+    "ret_o2_c3": (1, "Open[t+2]", "tradable_open_entry", "ret_c1_c3"),
+    "ret_o2_c5": (3, "Open[t+2]", "tradable_open_entry", "ret_c1_c5"),
+    "ret_o2_c10": (8, "Open[t+2]", "tradable_open_entry", "ret_c1_c10"),
+    "ret_c1_c2": (0, "Close[t+1]", "diagnostic_close_entry", "ret_o2_c2"),
+    "ret_c1_c3": (1, "Close[t+1]", "diagnostic_close_entry", "ret_o2_c3"),
+    "ret_c1_c5": (3, "Close[t+1]", "diagnostic_close_entry", "ret_o2_c5"),
+    "ret_c1_c10": (8, "Close[t+1]", "diagnostic_close_entry", "ret_o2_c10"),
+}
+
+
+def _cooldown_conditions(dataset: pd.DataFrame, base_signal: pd.Series, cfg: V8Config) -> dict[str, pd.Series]:
+    """Conditions known at Close[t+1], so the first tradable entry is Open[t+2]."""
+    conditions: dict[str, pd.Series] = {"all_high_limit_up_events": base_signal.copy()}
+    for threshold in cfg.cooldown_thresholds:
+        label = f"{threshold:g}"
+        conditions[f"intraday_o1_c1_le_{label}"] = base_signal & dataset["ret_o1_c1"].le(threshold)
+        conditions[f"close_c0_c1_le_{label}"] = base_signal & dataset["ret_c0_c1"].le(threshold)
+    breadth_decline = dataset["limit_up_ratio"].shift(-1).lt(dataset["limit_up_ratio"])
+    breadth_halved = dataset["limit_up_ratio"].shift(-1).le(dataset["limit_up_ratio"].mul(.5))
+    conditions["limit_up_breadth_declines"] = base_signal & breadth_decline
+    conditions["limit_up_breadth_halves"] = base_signal & breadth_halved
+    conditions["intraday_o1_c1_le_0_and_breadth_declines"] = (
+        base_signal & dataset["ret_o1_c1"].le(0) & breadth_decline
+    )
+    conditions["close_c0_c1_le_0_and_breadth_declines"] = (
+        base_signal & dataset["ret_c0_c1"].le(0) & breadth_decline
+    )
+    return conditions
+
+
+def build_limit_up_cooldown_validation(
+    dataset: pd.DataFrame, config: V8Config | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Validate 'large rise, next-day cooling, then O2 entry' without look-ahead.
+
+    The comparison baseline is other high-limit-up-breadth events that do not
+    satisfy the same cooldown condition.  It is deliberately not the earlier
+    O1 entry price, which would make a pullback appear mechanically superior.
+    """
+    cfg = config or V8Config()
+    signal_col = f"limit_up_ratio__PR_{cfg.pr_window}"
+    rows: list[dict[str, object]] = []
+    stage_rows: list[dict[str, object]] = []
+    yearly_rows: list[dict[str, object]] = []
+    for regime in ("ALL", "BULL", "BEAR"):
+        regime_mask = pd.Series(True, index=dataset.index) if regime == "ALL" else dataset["market_regime"].eq(regime)
+        base_signal = dataset[signal_col].ge(.8) & regime_mask
+        base_n = int(base_signal.sum())
+        if base_n == 0:
+            continue
+        next_limit_ratio = dataset["limit_up_ratio"].shift(-1)
+        breadth_change = next_limit_ratio.sub(dataset["limit_up_ratio"])
+        stage_mask = base_signal & dataset[["ret_c0_o1", "ret_o1_c1", "ret_c0_c1"]].notna().all(axis=1) & next_limit_ratio.notna()
+        base = dataset.loc[stage_mask]
+        stage_rows.append({
+            "market_regime": regime,
+            "base_signal": "limit_up_ratio rolling-252 PR>=80",
+            "signal_count": base_n,
+            "stage_observation_count": int(stage_mask.sum()),
+            "mean_gap_c0_o1": float(base["ret_c0_o1"].mean()),
+            "mean_intraday_o1_c1": float(base["ret_o1_c1"].mean()),
+            "median_intraday_o1_c1": float(base["ret_o1_c1"].median()),
+            "intraday_cooldown_rate": float(base["ret_o1_c1"].le(0).mean()),
+            "mean_close_c0_c1": float(base["ret_c0_c1"].mean()),
+            "close_not_above_signal_rate": float(base["ret_c0_c1"].le(0).mean()),
+            "mean_next_limit_up_ratio_change": float(breadth_change.loc[stage_mask].mean()),
+            "limit_up_breadth_decline_rate": float(next_limit_ratio.loc[stage_mask].lt(dataset.loc[stage_mask, "limit_up_ratio"]).mean()),
+            "limit_up_breadth_halving_rate": float(next_limit_ratio.loc[stage_mask].le(dataset.loc[stage_mask, "limit_up_ratio"].mul(.5)).mean()),
+        })
+        conditions = _cooldown_conditions(dataset, base_signal, cfg)
+        for condition, event_mask in conditions.items():
+            for target, (lag, entry_time, execution_status, alternate_target) in COOLDOWN_TARGETS.items():
+                eligible = base_signal & dataset[target].notna()
+                raw_mask = event_mask & eligible
+                for overlap_policy, selected in (
+                    ("raw", raw_mask),
+                    ("non_overlapping", _non_overlapping_mask(raw_mask, lag + 1)),
+                ):
+                    # Compare only within high-limit-up events.  For non-overlap,
+                    # apply the same spacing rule to the no-cooldown comparator.
+                    comparator_raw = eligible & ~event_mask
+                    comparator = comparator_raw if overlap_policy == "raw" else _non_overlapping_mask(comparator_raw, lag + 1)
+                    y_group = dataset.loc[selected, target].dropna().to_numpy(float)
+                    y_other = dataset.loc[comparator, target].dropna().to_numpy(float)
+                    if len(y_group) == 0:
+                        continue
+                    desc = _describe(y_group, cfg.annual_rf)
+                    combined = np.concatenate([y_group, y_other])
+                    group_flag = np.concatenate([np.ones(len(y_group), dtype=bool), np.zeros(len(y_other), dtype=bool)])
+                    diff, tval, pval = _weighted_difference_test(combined, group_flag, lag, "non_group")
+                    udiff, ut, up = _weighted_difference_test(combined, group_flag, lag, "unconditional")
+                    zt, zp, lo, hi = _hac_mean_test(y_group, lag)
+                    paired = dataset.loc[selected, [target, alternate_target]].dropna()
+                    alternate_mean = float(paired[alternate_target].mean()) if not paired.empty else np.nan
+                    entry_diff = paired[target].sub(paired[alternate_target]) if not paired.empty else pd.Series(dtype=float)
+                    entry_t, entry_p, _, _ = _hac_mean_test(entry_diff.to_numpy(float), lag) if not paired.empty else (np.nan, np.nan, np.nan, np.nan)
+                    rows.append({
+                        "predictor": "limit_up_ratio", "predictor_family": "LIMIT_UP_COOLDOWN",
+                        "direction": "up", "signal_method": "PR", "group": condition,
+                        "group_type": "prespecified_cooldown", "market_regime": regime,
+                        "target": target, "hac_lag": lag, "entry_time": entry_time,
+                        "execution_status": execution_status,
+                        "condition_known_time": "Close[t+1]", "overlap_policy": overlap_policy,
+                        "base_signal_count": base_n, "cooldown_event_count_raw": int(raw_mask.sum()),
+                        "cooldown_opportunity_rate": float(raw_mask.sum() / eligible.sum()) if eligible.sum() else np.nan,
+                        "comparator_event_count": int(comparator.sum()),
+                        **desc, "non_group_mean_ret": float(y_other.mean()) if len(y_other) else np.nan,
+                        "mean_ret_minus_non_group": diff, "HAC_t": tval, "HAC_p_value": pval,
+                        "Cohen_d": _cohen_d(y_group, y_other),
+                        "unconditional_mean_ret": float(combined.mean()) if len(combined) else np.nan,
+                        "mean_ret_minus_unconditional": udiff, "unconditional_HAC_t": ut,
+                        "unconditional_HAC_p": up,
+                        "Cohen_d_vs_unconditional": float((y_group.mean()-combined.mean())/combined.std(ddof=1)) if len(combined)>1 and combined.std(ddof=1)>0 else np.nan,
+                        "HAC_mean_vs_zero_t": zt, "HAC_mean_vs_zero_p": zp,
+                        "mean_ret_ci_lower": lo, "mean_ret_ci_upper": hi,
+                        "probability_loss_gt_1pct": float(np.mean(y_group < -.01)),
+                        "alternate_entry_target": alternate_target,
+                        "alternate_entry_same_events_mean": alternate_mean,
+                        "mean_minus_alternate_entry": float(entry_diff.mean()) if not entry_diff.empty else np.nan,
+                        "entry_timing_HAC_t": entry_t, "entry_timing_HAC_p": entry_p,
+                    })
+                    if overlap_policy == "non_overlapping":
+                        frame = dataset.loc[selected, [target]].dropna()
+                        for year, values in frame.groupby(frame.index.year)[target]:
+                            yearly_rows.append({
+                                "market_regime": regime, "condition": condition, "target": target,
+                                "entry_time": entry_time, "execution_status": execution_status,
+                                "year": int(year), "N": int(len(values)), "mean_return": float(values.mean()),
+                                "median_return": float(values.median()), "win_rate": float(values.gt(0).mean()),
+                            })
+    out = pd.DataFrame(rows)
+    from .statistics import add_multiple_testing_corrections
+    # Raw and non-overlapping rows describe the same hypothesis.  Only the
+    # prespecified non-overlapping rows enter multiplicity correction.
+    primary = add_multiple_testing_corrections(out.loc[out["overlap_policy"].eq("non_overlapping")].copy())
+    correction_cols = [c for c in primary if "FDR_" in c or "Bonferroni_" in c]
+    for col in correction_cols:
+        out[col] = np.nan
+        out.loc[primary.index, col] = primary[col]
+    yearly = pd.DataFrame(yearly_rows)
+    if not yearly.empty:
+        keys = ["market_regime", "condition", "target", "entry_time", "execution_status"]
+        summary = yearly.groupby(keys, dropna=False).agg(
+            years=("year", "nunique"), positive_year_count=("mean_return", lambda x: int((x > 0).sum())),
+            negative_year_count=("mean_return", lambda x: int((x < 0).sum())),
+            total_N=("N", "sum"), max_year_N_share=("N", lambda x: float(x.max()/x.sum()) if x.sum() else np.nan),
+        ).reset_index()
+        summary["direction_consistency_rate"] = summary[["positive_year_count", "negative_year_count"]].max(axis=1).div(summary["years"])
+    else:
+        summary = pd.DataFrame()
+    return pd.DataFrame(stage_rows), out, yearly.merge(summary, on=keys, how="left") if not yearly.empty else yearly

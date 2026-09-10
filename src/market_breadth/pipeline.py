@@ -4,7 +4,7 @@ import warnings
 
 import pandas as pd
 
-from .config import V6Config, V7Config
+from .config import V6Config, V7Config, V8Config
 from .core import add_forward_returns, add_market_regime, add_rolling_normalization, build_market_breadth
 from .data import (
     FINLAB_KEYS,
@@ -26,6 +26,7 @@ from .robustness import (
     attach_hypothesis_identity,
     build_fdr_comparison,
     build_limit_up_pullback_validation,
+    build_limit_up_cooldown_validation,
     build_quintile_trend_results,
     build_yearly_stability,
 )
@@ -120,6 +121,14 @@ def run(config: V6Config | None = None) -> dict[str, object]:
             "limit_up_pullback_yearly": pullback_yearly,
             "validation_summary": validation_summary,
         }
+        if isinstance(cfg, V8Config):
+            cooldown_stage, cooldown, cooldown_yearly = build_limit_up_cooldown_validation(dataset, cfg)
+            v7_outputs.update({
+                "limit_up_next_day_cooling": cooldown_stage,
+                "limit_up_o2_validation": cooldown,
+                "limit_up_o2_yearly": cooldown_yearly,
+                "v8_cooldown_summary": _build_cooldown_summary(cooldown_stage, cooldown),
+            })
     validations = validate_v6(common_close, breadth, dataset, results, config=cfg)
     metadata = build_metadata(cfg, dataset, breadth_meta, selected_keys)
     paths = export_results(dataset, results, monotonicity, yearly, metadata, validations, cfg, v7_outputs=v7_outputs)
@@ -152,5 +161,23 @@ def _build_validation_summary(
         ("漲停後等待回檔是否優於直接 O1 追價？", f"可交易、非重疊回檔組合中有 {improved} 個同事件比較呈正差且 HAC p<0.05；仍需對照完整表格判讀。"),
         ("扣除重複與重疊事件後，候選是否仍存在？", "以 non_overlapping 列及 v7 校正欄位為準，不以 raw event 顯著性代替。"),
         ("最終保留、降級與淘汰哪些訊號？", "此檔只提供可重現統計證據，不自動宣稱訊號可交易；由研究者依機制、穩定性與成本決策。"),
+    ]
+    return pd.DataFrame(rows, columns=["question", "answer"])
+
+
+def _build_cooldown_summary(stage: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
+    non_overlap = results.loc[results["overlap_policy"].eq("non_overlapping")]
+    valid_conditions = non_overlap.loc[
+        non_overlap["group"].ne("all_high_limit_up_events")
+        & non_overlap["execution_status"].eq("tradable_open_entry")
+    ]
+    rows = [
+        ("高漲停廣度後隔日是否常開高走低？", "詳見 limit_up_next_day_cooling 的 intraday_cooldown_rate。"),
+        ("隔日收盤是否常低於訊號日收盤？", "詳見 close_not_above_signal_rate；此定義與 O1→C1 開高走低分開。"),
+        ("漲停廣度本身是否隔日降溫？", "詳見 limit_up_breadth_decline_rate 與 halving_rate。"),
+        ("冷靜後 O2 報酬是否大於零？", f"non-overlapping 中有 {int(valid_conditions['mean_vs_zero_FDR_global'].lt(.05).sum())} 組通過 global FDR 5%。"),
+        ("冷靜後是否優於未冷靜事件？", f"non-overlapping 中有 {int(valid_conditions['group_vs_non_group_FDR_global'].lt(.05).sum())} 組通過 global FDR 5%。"),
+        ("C1 與 O2 進場如何比較？", "C1 為使用同一收盤確認條件的診斷性價格；O2 才是正式可交易進場。詳見 alternate-entry 與 entry-timing 欄位。"),
+        ("主要判讀原則", "比較 O2 之後報酬及 cooldown vs no-cooldown；不以等待價格低於 O1 的機械價差作為證據。"),
     ]
     return pd.DataFrame(rows, columns=["question", "answer"])

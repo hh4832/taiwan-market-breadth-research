@@ -90,3 +90,14 @@ v7：Robustness Validation
 - 新增預先指定候選的年度穩定性、leave-one-year-out 與五分位 HAC 趨勢檢定。
 - 新增 limit-up breadth PR>=80 的直接追價、日線回檔後 O2 可交易進場與非重疊事件比較。
 - v6 discovery grid 保持不變；v7 新報酬期間只用於 robustness validation。
+
+=======================================================
+
+v8：Limit-up Cooldown Validation
+
+- 固定基礎訊號為 limit_up_ratio rolling 252 日 PR>=80。
+- 明確拆分隔日開高走低（O1→C1）、隔日收盤低於訊號日（C0→C1）與漲停廣度下降。
+- 所有條件於 C1 後確認，正式進場固定為 O2，檢驗至 C2/C3/C5/C10。
+- 主要對照為其他高漲停廣度但未符合相同冷靜條件的事件，避免等待價格較低造成機械性優勢。
+- 同時輸出 raw 與 non-overlapping 事件、HAC、FDR、年度方向與樣本集中度。
+- 新增同事件、相同出場日的 C1 診斷性進場與 O2 可交易進場比較；C1 不宣稱可直接成交。

@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from .config import PREDICTOR_SPECS, TARGET_METADATA, V6Config, V7Config, V7_VALIDATION_TARGET_METADATA
+from .config import PREDICTOR_SPECS, TARGET_METADATA, V6Config, V7Config, V8Config, V7_VALIDATION_TARGET_METADATA
 from .summaries import build_signal_definitions
 
 
@@ -26,7 +26,7 @@ def build_metadata(config: V6Config, dataset: pd.DataFrame, breadth_metadata: di
     commit, branch = git_info()
     now = datetime.now(ZoneInfo("Asia/Taipei"))
     items = {
-        "study_version": "v7 Robustness Validation" if isinstance(config, V7Config) else "v6 Breadth Dynamics & Extreme Breadth Study",
+        "study_version": "v8 Limit-up Cooldown Validation" if isinstance(config, V8Config) else ("v7 Robustness Validation" if isinstance(config, V7Config) else "v6 Breadth Dynamics & Extreme Breadth Study"),
         "analysis_type": "signal discovery; not a composite trading strategy",
         "run_timestamp_asia_taipei": now.isoformat(),
         "git_commit": commit,
@@ -41,6 +41,7 @@ def build_metadata(config: V6Config, dataset: pd.DataFrame, breadth_metadata: di
         "multiple_testing_family": "predictor_family × target × regime × signal_method; hypotheses corrected separately",
         "v7_hypothesis_deduplication": "exact signal-date mask hash; aliases and exact mirror masks corrected once" if isinstance(config, V7Config) else "not applied",
         "v7_pullback_rule": "limit_up_ratio PR>=80; t+1 close confirms pullback; primary entry Open[t+2]" if isinstance(config, V7Config) else "not applied",
+        "v8_cooldown_rule": "separates O1-C1 intraday cooling, C0-C1 close cooling, and next-day limit-up breadth cooling; entry Open[t+2]" if isinstance(config, V8Config) else "not applied",
         **{f"breadth_{k}": v for k, v in breadth_metadata.items()},
         **{f"finlab_{k}": v for k, v in selected_keys.items()},
     }
@@ -71,7 +72,7 @@ def export_results(
     pearson = dataset[list(PREDICTOR_SPECS)].corr("pearson")
     spearman = dataset[list(PREDICTOR_SPECS)].corr("spearman")
     sheets = {
-        ("all_results_v7" if isinstance(config, V7Config) else "all_results_v6"): results,
+        ("all_results_v8" if isinstance(config, V8Config) else ("all_results_v7" if isinstance(config, V7Config) else "all_results_v6")): results,
         "mean_vs_zero_results": results,
         "group_vs_non_group": results,
         "group_vs_unconditional": results,
@@ -104,11 +105,18 @@ def export_results(
         if summary is not None:
             paths["validation_summary"] = out / "v7_validation_summary.md"
             paths["validation_summary"].write_text(_validation_summary_markdown(summary), encoding="utf-8")
+        cooldown_summary = v7_outputs.get("v8_cooldown_summary")
+        if cooldown_summary is not None:
+            paths["cooldown_summary"] = out / "v8_cooldown_summary.md"
+            paths["cooldown_summary"].write_text(
+                _validation_summary_markdown(cooldown_summary, title="v8 Limit-up Cooldown Validation"),
+                encoding="utf-8",
+            )
     return paths
 
 
-def _validation_summary_markdown(summary: pd.DataFrame) -> str:
-    lines = ["# v7 Validation Summary", ""]
+def _validation_summary_markdown(summary: pd.DataFrame, title: str = "v7 Validation Summary") -> str:
+    lines = [f"# {title}", ""]
     for row in summary.itertuples(index=False):
         lines.extend([f"## {row.question}", "", str(row.answer), ""])
     return "\n".join(lines)
@@ -119,7 +127,7 @@ def archive_to_drive(paths: dict[str, Path], repo_name: str, drive_root: Path = 
     stamp = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d_%H%M%S")
     archive = drive_root / repo_name / f"{stamp}_{commit[:12]}"
     archive.mkdir(parents=True, exist_ok=False)
-    for key in ("summary", "dataset", "run_info", "validation_summary"):
+    for key in ("summary", "dataset", "run_info", "validation_summary", "cooldown_summary"):
         if key in paths:
             shutil.copy2(paths[key], archive / paths[key].name)
     if paths["plots"].exists():

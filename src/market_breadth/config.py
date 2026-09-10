@@ -32,6 +32,14 @@ class V7Config(V6Config):
     pullback_thresholds: tuple[float, ...] = (0.0, -0.005, -0.01)
 
 
+@dataclass(frozen=True)
+class V8Config(V7Config):
+    """Prespecified validation of next-day cooling after high limit-up breadth."""
+
+    output_dir: Path = Path("output/market_breadth_0050_study_v8_cooldown")
+    cooldown_thresholds: tuple[float, ...] = (0.0, -0.005, -0.01)
+
+
 PREDICTOR_SPECS = {
     "up_ratio": ("LEVEL", "up"),
     "down_ratio": ("LEVEL", "down"),
@@ -74,6 +82,8 @@ V7_VALIDATION_TARGET_METADATA = {
     "ret_c1_c2": {"formula": "Close[t+2] / Close[t+1] - 1", "hac_lag": 0},
     "ret_c1_c3": {"formula": "Close[t+3] / Close[t+1] - 1", "hac_lag": 1},
     "ret_c1_c5": {"formula": "Close[t+5] / Close[t+1] - 1", "hac_lag": 3},
+    "ret_o2_c10": {"formula": "Close[t+10] / Open[t+2] - 1", "hac_lag": 8},
+    "ret_c1_c10": {"formula": "Close[t+10] / Close[t+1] - 1", "hac_lag": 8},
 }
 
 PR_GROUPS = {
