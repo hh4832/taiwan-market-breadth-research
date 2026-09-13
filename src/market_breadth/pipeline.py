@@ -76,12 +76,8 @@ def run(config: V6Config | None = None) -> dict[str, object]:
         breadth.to_parquet(cache)
         write_cache_metadata(cache, symbols, cfg)
 
-    adj_open, selected_keys["adj_open"] = load_first_available("adj_open", FINLAB_KEYS["adj_open"], cfg.cache_dir, cfg.refresh, required=False)
-    adj_close, selected_keys["adj_close"] = load_first_available("adj_close", FINLAB_KEYS["adj_close"], cfg.cache_dir, cfg.refresh, required=False)
-    if adj_open is None or adj_close is None:
-        adj_open, selected_keys["open"] = load_first_available("open", FINLAB_KEYS["open"], cfg.cache_dir, cfg.refresh)
-        adj_close, selected_keys["close"] = load_first_available("close", FINLAB_KEYS["close"], cfg.cache_dir, cfg.refresh)
-        warnings.warn("0050 使用未還原價格，除權息可能影響跨日報酬", UserWarning)
+    adj_open, selected_keys["adj_open"] = load_first_available("adj_open", FINLAB_KEYS["adj_open"], cfg.cache_dir, cfg.refresh)
+    adj_close, selected_keys["adj_close"] = load_first_available("adj_close", FINLAB_KEYS["adj_close"], cfg.cache_dir, cfg.refresh)
     open_0050 = limit_date(_symbol(adj_open, cfg.target_symbol, "open_0050"), cfg)
     close_0050 = limit_date(_symbol(adj_close, cfg.target_symbol, "close_0050"), cfg)
 

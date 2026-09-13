@@ -14,10 +14,8 @@ from .core import normalize_datetime_index
 FINLAB_KEYS = {
     "stock_close": ["price:收盤價"],
     "metadata": ["company_basic_info", "security_categories", "stock_basic_info"],
-    "adj_open": ["etl:adj_open", "price:還原開盤價", "price:調整開盤價"],
-    "adj_close": ["etl:adj_close", "price:還原收盤價", "price:調整收盤價"],
-    "open": ["price:開盤價"],
-    "close": ["price:收盤價"],
+    "adj_open": ["etl:adj_open"],
+    "adj_close": ["etl:adj_close"],
 }
 
 EVENT_REFERENCE_KEYS = [
