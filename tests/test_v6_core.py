@@ -14,6 +14,22 @@ from market_breadth.core import (
     rolling_percentile_rank,
     normalize_datetime_index,
 )
+
+
+def test_corporate_action_outcome_uses_adjusted_open_and_close():
+    index = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"])
+    breadth = pd.DataFrame(index=index)
+    adjusted_open = pd.Series([100.0, 100.0, 101.0], index=index)
+    adjusted_close = pd.Series([100.0, 101.0, 102.0], index=index)
+    result = add_forward_returns(breadth, adjusted_open, adjusted_close)
+    assert np.isclose(result.loc[index[0], "ret_o1_c1"], 0.01)
+    assert np.isclose(result.loc[index[0], "ret_o1_c2"], 0.02)
+
+
+def test_outcome_sources_have_no_raw_price_fallback():
+    from market_breadth.data import FINLAB_KEYS
+    assert FINLAB_KEYS["adj_open"] == ["etl:adj_open"]
+    assert FINLAB_KEYS["adj_close"] == ["etl:adj_close"]
 from market_breadth.statistics import run_signal_study
 from market_breadth.validation import validate_v6
 
