@@ -61,6 +61,17 @@ class V10Config(V9Config):
     version_slug: str = "v10_post2015_breadth_pr_bins"
 
 
+@dataclass(frozen=True)
+class V11Config(V10Config):
+    """Mechanism, raw-threshold mapping, and 7%/10% regime reconciliation."""
+
+    start_date: str = "2011-01-01"
+    study_version: str = "v11 Breadth Mechanism & Regime Reconciliation"
+    version_slug: str = "v11_breadth_mechanism_regime"
+    regime_change_date: str = "2015-06-01"
+    prior_return_windows: tuple[int, ...] = (1, 3, 5, 10)
+
+
 V9_RAW_PREDICTORS = {
     "limit_up_ratio": ("LIMIT", "up"),
     "limit_down_ratio": ("LIMIT", "down"),

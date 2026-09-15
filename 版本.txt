@@ -84,6 +84,16 @@ v6：Breadth Dynamics & Extreme Breadth Study
 
 =======================================================
 
+v11：Breadth Mechanism & Regime Reconciliation
+
+- 固定 v10 Candidate A/B/C，不新增 predictor、PR window、holding horizon 或最佳化 threshold。
+- 使用 adjusted 0050 close 建立 prior 1/3/5/10 日報酬，分別控制後估計 breadth beta、HAC CI 與 attenuation。
+- 將 up_ratio PR95 與 big_up_ratio 5D PR60/80 映射為 strict t-1 historical raw threshold及年度漂移。
+- 以歷史正確 ±7%／±10% limit rule 比較制度切換前後，並正式估計 Signal×Post2015 interaction。
+- 新增三模組獨立輸出、mechanism summary、13 個 Excel sheets、8 張圖與 stage/progress logging。
+
+=======================================================
+
 v10：Post-2015 Breadth State & PR-Bin Validation
 
 - 新增 participation breadth，正式比較 participation、extreme ±5% 與 limit breadth。
