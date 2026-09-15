@@ -81,3 +81,36 @@ v6：Breadth Dynamics & Extreme Breadth Study
 - 新增 Colab runner、Google Drive timestamped archive、合成資料 unit/smoke tests。
 - 漲跌停判斷改採前一個有效收盤價＋臺股 tick-size rounding；2015-06-01 前使用 7%，之後使用 10%，並支援公司行動參考價覆蓋。
 - README 新增可直接開啟 main branch v6 notebook 的 Open in Colab badge。
+
+=======================================================
+
+v9：Post-2015 Breadth PR & Win-Rate Validation
+
+- Primary sample 固定自 2015-06-01 起，避免混合 7% 與 10% 漲跌停制度。
+- 只使用 LIMIT、EXTREME_5PCT 與其 1/3/5 日平均後的一階 DELTA；不使用 acceleration 或 Z-score。
+- rolling PR 使用 60/126/252 日 t-1 歷史分布，明確排除 t。
+- 0050 O1→C1/C3/C5/C10/C20 outcome 強制使用 etl:adj_open / etl:adj_close。
+- 新增 signal-vs-non-signal LPM HAC 勝率推論，平均報酬與勝率分開作 family/global FDR。
+- 新增 exact-mask 去重、descriptive PR bins、年度與 non-overlapping robustness。
+- local/Drive output 改用單一 timestamp、version 與 commit 組成的 run_id，拒絕覆寫。
+- 新增可重複 Run All 的 v9 Colab runner與 synthetic tests。
+
+=======================================================
+
+v7：Robustness Validation
+
+- 以實際訊號日期遮罩 hash 去除 PR 別名與完全相同鏡像假設後，重新計算 FDR/Bonferroni。
+- 新增預先指定候選的年度穩定性、leave-one-year-out 與五分位 HAC 趨勢檢定。
+- 新增 limit-up breadth PR>=80 的直接追價、日線回檔後 O2 可交易進場與非重疊事件比較。
+- v6 discovery grid 保持不變；v7 新報酬期間只用於 robustness validation。
+
+=======================================================
+
+v8：Limit-up Cooldown Validation
+
+- 固定基礎訊號為 limit_up_ratio rolling 252 日 PR>=80。
+- 明確拆分隔日開高走低（O1→C1）、隔日收盤低於訊號日（C0→C1）與漲停廣度下降。
+- 所有條件於 C1 後確認，正式進場固定為 O2，檢驗至 C2/C3/C5/C10。
+- 主要對照為其他高漲停廣度但未符合相同冷靜條件的事件，避免等待價格較低造成機械性優勢。
+- 同時輸出 raw 與 non-overlapping 事件、HAC、FDR、年度方向與樣本集中度。
+- 新增同事件、相同出場日的 C1 診斷性進場與 O2 可交易進場比較；C1 不宣稱可直接成交。

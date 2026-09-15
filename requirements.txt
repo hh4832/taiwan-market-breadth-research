@@ -6,4 +6,4 @@ matplotlib>=3.8,<4
 openpyxl>=3.1,<4
 pyarrow>=15,<30
 tqdm>=4.66,<5
-
+pytest>=8,<9
