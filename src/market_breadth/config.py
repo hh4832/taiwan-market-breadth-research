@@ -53,11 +53,28 @@ class V9Config(V6Config):
     output_dir: Path = Path("output")
 
 
+@dataclass(frozen=True)
+class V10Config(V9Config):
+    """Pre-specified post-2015 state and mutually-exclusive PR-bin study."""
+
+    study_version: str = "v10 Post-2015 Breadth State & PR-Bin Validation"
+    version_slug: str = "v10_post2015_breadth_pr_bins"
+
+
 V9_RAW_PREDICTORS = {
     "limit_up_ratio": ("LIMIT", "up"),
     "limit_down_ratio": ("LIMIT", "down"),
     "big_up_ratio": ("EXTREME_5PCT", "up"),
     "big_down_ratio": ("EXTREME_5PCT", "down"),
+}
+
+V10_RAW_PREDICTORS = {
+    "up_ratio": ("PARTICIPATION", "up"),
+    "down_ratio": ("PARTICIPATION", "down"),
+    "big_up_ratio": ("EXTREME_5PCT", "up"),
+    "big_down_ratio": ("EXTREME_5PCT", "down"),
+    "limit_up_ratio": ("LIMIT", "up"),
+    "limit_down_ratio": ("LIMIT", "down"),
 }
 
 V9_TARGET_METADATA = {

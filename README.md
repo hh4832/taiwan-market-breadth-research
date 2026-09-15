@@ -1,10 +1,19 @@
 # Taiwan Market Breadth Research
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hh4832/taiwan-market-breadth-research/blob/feature/v9-post2015-breadth-pr-winrate/%E5%B8%82%E5%A0%B4%E5%BB%A3%E5%BA%A6%E9%A0%90%E6%B8%AC0050%E5%A0%B1%E9%85%AC_v9_post2015_pr_winrate.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hh4832/taiwan-market-breadth-research/blob/feature/v10-post2015-breadth-pr-bins/%E5%B8%82%E5%A0%B4%E5%BB%A3%E5%BA%A6%E9%A0%90%E6%B8%AC0050%E5%A0%B1%E9%85%AC_v10_post2015_pr_bins.ipynb)
 
-目前研究版本：**v9 Post-2015 Breadth PR & Win-Rate Validation**。
+目前研究版本：**v10 Post-2015 Breadth State & PR-Bin Validation**。
 
-這是 pre-specified robustness re-test：在 2015-06-01 臺股 ±10% 漲跌停制度開始後，重新驗證市場極端廣度與變化速度是否改變 0050 自次日開盤起未來 1、3、5、10、20 日的平均報酬及上漲機率。
+這是 pre-specified state/shape re-test：在 2015-06-01 臺股 ±10% 漲跌停制度開始後，比較 participation、extreme ±5% 與 limit breadth，驗證其 Level／Delta 所處互斥 PR bin 是否改變 0050 自次日開盤起未來 1、3、5、10、20 日的平均報酬及上漲機率。
+
+## v10 研究設計
+
+- 六個 raw predictors：`up_ratio`、`down_ratio`、`big_up_ratio`、`big_down_ratio`、`limit_up_ratio`、`limit_down_ratio`。
+- 每個 predictor 建立 1/3/5 日 trailing mean，再分 Level 與一階 Delta；不測 acceleration。
+- rolling PR 60/126/252 嚴格以 t-1 以前資料評估 x[t]。
+- Primary inference 使用七個互斥且完備的 PR bins：<5、5–20、20–40、40–60、60–80、80–95、≥95。
+- Primary comparison 是 bin vs non-bin；平均報酬與勝率分開做 family/global FDR 與 Bonferroni。
+- 輸出 ordered-bin shape、Spearman、high-low contrasts、non-overlap、年度穩健性與 small-N guardrails。
 
 ## v9 研究設計
 
@@ -31,13 +40,13 @@ predictor_family × target × PR_window × mean_window × raw/delta × overlap_p
 1. 確認既有 Drive output folder 位於 `/content/drive/MyDrive/Quant_Research/taiwan-market-breadth-research`。Notebook 只驗證此固定路徑，不會猜測或自動建立資料夾。
 2. Private repo 才需要在 Colab Secrets 提供 `GITHUB_TOKEN`；token 不會寫入 remote 或 notebook output。
 3. 提供 FinLab 登入狀態或 `FINLAB_API_TOKEN`。
-4. 開啟 v9 notebook後 Run All。同一 Runtime 再 Run All 時會先切回 `/content`，驗證既有 repo remote 後才移除並 fresh clone，避免 deleted-cwd 與 clone collision。
+4. 開啟 v10 notebook後 Run All。同一 Runtime 再 Run All 時會先切回 `/content`，驗證既有 repo remote 後才移除並 fresh clone，避免 deleted-cwd 與 clone collision。
 
 每次執行只建立一次 Asia/Taipei timestamp，並共用：
 
 ```text
-run_id = YYYYMMDD_HHMMSS_v9_post2015_breadth_pr_winrate_<commit12>
-local = <repo>/output/v9_post2015_breadth_pr_winrate/<run_id>/
+run_id = YYYYMMDD_HHMMSS_v10_post2015_breadth_pr_bins_<commit12>
+local = <repo>/output/v10_post2015_breadth_pr_bins/<run_id>/
 drive = /content/drive/MyDrive/Quant_Research/taiwan-market-breadth-research/<run_id>/
 ```
 
@@ -49,8 +58,12 @@ drive = /content/drive/MyDrive/Quant_Research/taiwan-market-breadth-research/<ru
 - `daily_dataset.parquet`
 - `run_info.txt`
 - `validation_summary.md`
-- `win_rate_results.parquet`
-- `yearly_results.parquet`
+- `all_results_v10.parquet`
+- `win_rate_results_v10.parquet`
+- `pr_bin_results_v10.parquet`
+- `yearly_results_v10.parquet`
+- `non_overlapping_results_v10.parquet`
+- `deduplicated_hypotheses_v10.parquet`
 - `hypothesis_registry.csv`
 - `signal_definitions.csv`
 - `plots/`
@@ -69,7 +82,7 @@ PYTHONPATH=src python run_research.py
 
 ## 漲跌停判斷
 
-沿用 production rule：以前一有效 raw close 為基準，套用公司行動參考價 override、臺灣 tick-size rounding 與 10% limit rule。v9 不以 `daily return >= 9.5%` 近似漲跌停。
+沿用 production rule：以前一有效 raw close 為基準，套用公司行動參考價 override、臺灣 tick-size rounding 與 10% limit rule。v10 不以 `daily return >= 9.5%` 近似漲跌停。
 
 ## 解讀限制
 

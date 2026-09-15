@@ -84,6 +84,17 @@ v6：Breadth Dynamics & Extreme Breadth Study
 
 =======================================================
 
+v10：Post-2015 Breadth State & PR-Bin Validation
+
+- 新增 participation breadth，正式比較 participation、extreme ±5% 與 limit breadth。
+- 六個 raw ratio 建立 1/3/5 日 trailing mean 與 Level／Delta；不加入 acceleration。
+- PR60／126／252 採 t-1 以前 strict historical reference，primary inference 改為七個互斥且完備的 PR bins。
+- Primary comparison 為 bin vs non-bin，平均報酬與勝率分開作 family/global FDR 與 Bonferroni。
+- 加入 ordered-bin shape、Spearman、high-low contrasts、non-overlap、年度穩健性與 small-N guardrails。
+- 新增 v10 Excel/Parquet、10 類圖形、validation summary 與可重複 Run All 的 Colab runner。
+
+=======================================================
+
 v9：Post-2015 Breadth PR & Win-Rate Validation
 
 - Primary sample 固定自 2015-06-01 起，避免混合 7% 與 10% 漲跌停制度。
