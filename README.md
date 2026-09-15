@@ -28,7 +28,7 @@ predictor_family × target × PR_window × mean_window × raw/delta × overlap_p
 
 ## Colab 執行
 
-1. 將指定的既有 Drive output folder 建立 MyDrive 捷徑，固定命名為 `taiwan-market-breadth-output`。Notebook 只驗證此捷徑，不會猜路徑或建立同名資料夾。
+1. 確認既有 Drive output folder 位於 `/content/drive/MyDrive/Quant_Research/taiwan-market-breadth-research`。Notebook 只驗證此固定路徑，不會猜測或自動建立資料夾。
 2. Private repo 才需要在 Colab Secrets 提供 `GITHUB_TOKEN`；token 不會寫入 remote 或 notebook output。
 3. 提供 FinLab 登入狀態或 `FINLAB_API_TOKEN`。
 4. 開啟 v9 notebook後 Run All。同一 Runtime 再 Run All 時會先切回 `/content`，驗證既有 repo remote 後才移除並 fresh clone，避免 deleted-cwd 與 clone collision。
@@ -38,7 +38,7 @@ predictor_family × target × PR_window × mean_window × raw/delta × overlap_p
 ```text
 run_id = YYYYMMDD_HHMMSS_v9_post2015_breadth_pr_winrate_<commit12>
 local = <repo>/output/v9_post2015_breadth_pr_winrate/<run_id>/
-drive = <existing Drive output root>/<run_id>/
+drive = /content/drive/MyDrive/Quant_Research/taiwan-market-breadth-research/<run_id>/
 ```
 
 任何同名 local/Drive run folder已存在時都會直接報錯，不覆寫舊結果。研究先完整寫入 local、完成驗證，再複製到 Drive 並比較檔案 manifest。

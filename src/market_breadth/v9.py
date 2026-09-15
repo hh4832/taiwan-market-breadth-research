@@ -108,6 +108,11 @@ def _one_result(
     t0, p0, lo0, hi0 = _hac_mean_test(yg, lag)
     mean_diff, mean_t, mean_p = _weighted_difference_test(y, g, lag, "non_group")
     wins, other_wins = yg > 0, yo > 0
+    positive_returns = yg[yg > 0]
+    negative_returns = yg[yg < 0]
+    avg_win = float(positive_returns.mean()) if len(positive_returns) else np.nan
+    avg_loss = float(negative_returns.mean()) if len(negative_returns) else np.nan
+    payoff_ratio = avg_win / abs(avg_loss) if np.isfinite(avg_win) and np.isfinite(avg_loss) and avg_loss else np.nan
     win_diff, win_se, win_t, win_p, win_half = _hac_lpm(y > 0, g, lag)
     odds_ratio, log_odds, or_low, or_high, logistic_p = _odds_ratio(wins, other_wins)
     return {
@@ -116,10 +121,14 @@ def _one_result(
         "signal_column": signal_col, "group": group, "threshold": threshold,
         "target": target, "hac_lag": lag, "overlap_policy": overlap_policy,
         "N": int(len(yg)), **desc,
+        "avg_win": avg_win, "avg_loss": avg_loss, "payoff_ratio": payoff_ratio,
+        "expectancy": float(yg.mean()),
+        "HAC_mean_vs_zero_se": abs(float(yg.mean()) / t0) if np.isfinite(t0) and t0 != 0 else np.nan,
         "HAC_mean_vs_zero_t": t0, "HAC_mean_vs_zero_p": p0,
         "mean_ret_ci_lower": lo0, "mean_ret_ci_upper": hi0,
         "non_signal_N": int(len(yo)), "non_signal_mean_ret": float(yo.mean()),
         "mean_ret_minus_non_signal": mean_diff, "mean_difference_HAC_t": mean_t,
+        "mean_difference_HAC_se": abs(mean_diff / mean_t) if np.isfinite(mean_t) and mean_t != 0 else np.nan,
         "mean_difference_HAC_p": mean_p, "Cohen_d": _cohen_d(yg, yo),
         "signal_win_rate": float(wins.mean()), "non_signal_win_rate": float(other_wins.mean()),
         "unconditional_win_rate": float((y > 0).mean()),

@@ -43,7 +43,10 @@ def build_signal_definitions(config: V9Config) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def run_v9(config: V9Config | None = None, context: RunContext | None = None) -> dict[str, object]:
+def run_v9(
+    config: V9Config | None = None, context: RunContext | None = None,
+    drive_output_root: Path | None = None,
+) -> dict[str, object]:
     cfg = config or V9Config()
     ctx = context or create_run_context(cfg.version_slug, cfg.output_dir)
     cfg.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -81,8 +84,8 @@ def run_v9(config: V9Config | None = None, context: RunContext | None = None) ->
     results = attach_identity_and_corrections(results, dataset)
     bins = build_pr_bins(dataset, specs, cfg)
     yearly = build_v9_yearly(results, dataset)
-    validations = validate_v9(dataset, results, cfg)
-    metadata = build_v9_metadata(cfg, ctx, dataset, selected, breadth_meta)
+    validations = validate_v9(dataset, results, cfg, selected)
+    metadata = build_v9_metadata(cfg, ctx, dataset, selected, breadth_meta, drive_output_root)
     definitions = build_signal_definitions(cfg)
     paths = export_v9(dataset, results, bins, yearly, definitions, metadata, validations, ctx)
     plot_manifest = make_v9_plots(results, bins, yearly, paths["plots"])

@@ -11,8 +11,9 @@ import numpy as np
 import pandas as pd
 
 from market_breadth.config import V9Config, V9_TARGET_METADATA
+from market_breadth.colab import validate_existing_clone
 from market_breadth.core import add_forward_returns, build_market_breadth
-from market_breadth.run_context import archive_run, create_run_context
+from market_breadth.run_context import OFFICIAL_DRIVE_OUTPUT_ROOT, archive_run, create_run_context, validate_drive_root
 from market_breadth.v9 import (
     add_v9_pr_features, attach_identity_and_corrections, build_v9_features,
     historical_percentile_rank, run_v9_threshold_study,
@@ -76,9 +77,31 @@ class V9FeatureTests(unittest.TestCase):
         self.assertTrue(np.allclose(results.signal_win_rate, results.successes/results.N))
         self.assertTrue(results.canonical_hypothesis_id.notna().all())
         self.assertTrue(results.filter(regex="FDR").apply(lambda s: s.dropna().between(0, 1).all()).all())
+        self.assertTrue((results.successes + results.failures).eq(results.N).all())
+        self.assertTrue(results[["avg_win", "avg_loss", "payoff_ratio", "expectancy"]].notna().any().all())
+
+    def test_non_overlapping_rows_are_thinned(self):
+        idx = pd.date_range("2020-01-01", periods=400)
+        wave = np.sin(np.arange(len(idx)) / 5)
+        raw = pd.DataFrame({k: wave for k in ("limit_up_ratio", "limit_down_ratio", "big_up_ratio", "big_down_ratio")}, index=idx)
+        data, specs = build_v9_features(raw, V9Config())
+        data = add_v9_pr_features(data, specs, V9Config())
+        for target in V9_TARGET_METADATA: data[target] = np.where(np.arange(len(idx)) % 2, .01, -.01)
+        results = run_v9_threshold_study(data, {"limit_up_ratio__mean_1d": specs["limit_up_ratio__mean_1d"]}, V9Config())
+        all_n = results.query("target == 'ret_o1_c20' and overlap_policy == 'all_events'").N.max()
+        non_n = results.query("target == 'ret_o1_c20' and overlap_policy == 'non_overlapping_events'").N.max()
+        self.assertLess(non_n, all_n)
 
 
 class V9ArchiveTests(unittest.TestCase):
+    def test_official_drive_root_constant(self):
+        self.assertEqual(str(OFFICIAL_DRIVE_OUTPUT_ROOT), "/content/drive/MyDrive/Quant_Research/taiwan-market-breadth-research")
+
+    def test_colab_clone_path_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            unexpected = Path(tmp) / "repo"; unexpected.mkdir()
+            with self.assertRaises(RuntimeError): validate_existing_clone(unexpected)
+
     def test_versioned_run_id_and_no_overwrite_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

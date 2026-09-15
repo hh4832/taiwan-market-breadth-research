@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 
 REPOSITORY = "hh4832/taiwan-market-breadth-research"
+OFFICIAL_DRIVE_OUTPUT_ROOT = Path("/content/drive/MyDrive/Quant_Research/taiwan-market-breadth-research")
 
 
 def project_root() -> Path:
@@ -46,16 +47,25 @@ def create_run_context(version_slug: str, output_root: Path | None = None, now: 
     return RunContext(run_id, moment.isoformat(), version_slug, commit, branch, local)
 
 
-def archive_run(local_run_dir: Path, drive_output_root: Path, run_id: str) -> Path:
+def validate_drive_root(drive_output_root: Path, *, require_official: bool = False) -> Path:
     root = drive_output_root.expanduser().resolve()
+    if require_official and str(drive_output_root) != str(OFFICIAL_DRIVE_OUTPUT_ROOT):
+        raise AssertionError(f"Unexpected DRIVE_OUTPUT_ROOT: {drive_output_root}")
     if not root.exists() or not root.is_dir():
         raise FileNotFoundError(f"DRIVE_OUTPUT_ROOT does not exist: {root}")
+    return root
+
+
+def archive_run(local_run_dir: Path, drive_output_root: Path, run_id: str, *, require_official_root: bool = False) -> Path:
+    root = validate_drive_root(drive_output_root, require_official=require_official_root)
     archive = root / run_id
     if archive.exists():
         raise FileExistsError(f"Drive archive already exists; refusing overwrite: {archive}")
     if archive.resolve() == local_run_dir.resolve():
         raise ValueError("Local output and Drive archive must be different directories")
     shutil.copytree(local_run_dir, archive)
+    if archive.parent.resolve() != root:
+        raise AssertionError("DRIVE_RUN_DIR parent differs from DRIVE_OUTPUT_ROOT")
     validate_archive(local_run_dir, archive)
     return archive
 

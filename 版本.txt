@@ -94,6 +94,8 @@ v9：Post-2015 Breadth PR & Win-Rate Validation
 - 新增 exact-mask 去重、descriptive PR bins、年度與 non-overlapping robustness。
 - local/Drive output 改用單一 timestamp、version 與 commit 組成的 run_id，拒絕覆寫。
 - 新增可重複 Run All 的 v9 Colab runner與 synthetic tests。
+- Drive root 確認為 `/content/drive/MyDrive/Quant_Research/taiwan-market-breadth-research`，不存在時停止且不得自動建立。
+- Python 非 3.11 時改為 warning，安裝依賴、匯入套件並通過 unit tests 後才允許繼續，run_info 記錄 runtime deviation。
 
 =======================================================
 

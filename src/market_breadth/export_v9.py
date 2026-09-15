@@ -9,14 +9,21 @@ from .run_context import REPOSITORY, RunContext
 from .v9 import validation_summary_markdown
 
 
-def build_v9_metadata(config: V9Config, context: RunContext, dataset: pd.DataFrame, selected: dict, breadth_meta: dict) -> pd.DataFrame:
+def build_v9_metadata(
+    config: V9Config, context: RunContext, dataset: pd.DataFrame, selected: dict,
+    breadth_meta: dict, drive_output_root: Path | None = None,
+) -> pd.DataFrame:
+    sys = __import__("sys")
+    drive_run_dir = drive_output_root / context.run_id if drive_output_root is not None else None
     values = {
         "study_version": config.study_version, "version_slug": config.version_slug,
         "run_id": context.run_id, "run_timestamp_asia_taipei": context.timestamp,
         "git_commit": context.git_commit, "git_branch": context.git_branch, "repository": REPOSITORY,
-        "python_version": __import__("sys").version.replace("\n", " "),
+        "python_version": sys.version.replace("\n", " "), "python_executable": sys.executable,
+        "python_baseline": "3.11", "python_runtime_deviation": sys.version_info[:2] != (3, 11),
         "actual_start_date": dataset.index.min(), "actual_end_date": dataset.index.max(),
-        "sample_rule": "post_2015_10pct_limit_regime", "sample_start_date": config.start_date,
+        "sample_start_date": dataset.index.min(), "sample_end_date": dataset.index.max(),
+        "sample_rule": "post_2015_10pct_limit_regime",
         "price_source_open": selected.get("adj_open"), "price_source_close": selected.get("adj_close"),
         "outcome_price_adjusted": selected.get("adj_open") == "etl:adj_open" and selected.get("adj_close") == "etl:adj_close",
         "signal_availability": "after t close", "formal_entry": "Open[t+1]",
@@ -27,8 +34,9 @@ def build_v9_metadata(config: V9Config, context: RunContext, dataset: pd.DataFra
         "HAC_lags": ",".join(f"{k}:{v['hac_lag']}" for k, v in V9_TARGET_METADATA.items()),
         "multiple_testing_definition": "mean-return and win-rate separate; global plus predictor_family×target×PR_window×mean_window×raw/delta×overlap family",
         "win_rate_statistical_methods": "signal-vs-non-signal LPM HAC primary; binomial vs 50% and 2x2 odds ratio supplementary",
-        "local_output_dir": str(context.local_run_dir), "drive_output_root": "set and validated by Colab runner",
-        "drive_run_dir": "created only after local validation",
+        "local_run_dir": str(context.local_run_dir),
+        "drive_output_root": str(drive_output_root) if drive_output_root is not None else "not configured",
+        "drive_run_dir": str(drive_run_dir) if drive_run_dir is not None else "not configured",
         "limit_up/down_detection_rule": "corporate-action-aware reference price + Taiwan tick rounding + 10% rule",
         "limit_status_is_approximation": False, "big_move_threshold": config.big_move_threshold,
         "big_move_operator": "strict > +0.05 / < -0.05", "big_move_denominator": "valid_stock_count; flat included; missing excluded",
@@ -50,10 +58,14 @@ def export_v9(
         "plots": out / "plots", "win_rate": out / "win_rate_results.parquet",
         "yearly": out / "yearly_results.parquet", "registry": out / "hypothesis_registry.csv",
         "definitions": out / "signal_definitions.csv",
+        "all_results": out / "all_results_v9.parquet",
+        "deduplicated": out / "deduplicated_hypotheses.parquet",
     }
     paths["plots"].mkdir(exist_ok=False)
     dataset.to_parquet(paths["dataset"])
     results.to_parquet(paths["win_rate"])
+    results.to_parquet(paths["all_results"])
+    results.loc[~results.is_duplicate_hypothesis].to_parquet(paths["deduplicated"])
     yearly.to_parquet(paths["yearly"])
     results.to_csv(paths["registry"], index=False)
     definitions.to_csv(paths["definitions"], index=False)
